@@ -1,93 +1,83 @@
-import speech_recognition as sr
-import pyttsx3
-import numpy as np
-import sounddevice as sd
-from noisereduce import reduce_noise
-import time
-import board
-import busio
-from adafruit_ssd1306 import SSD1306_I2C
+#include <Adafruit_SSD1306.h>
+#include <FluxGarage_RoboEyes.h>
 
-# Initialize speech recognizer and text-to-speech engine
-recognizer = sr.Recognizer()
-engine = pyttsx3.init()
+// OLED display dimensions and setup
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-# Initialize OLED display
-i2c = busio.I2C(board.SCL, board.SDA)
-disp = SSD1306_I2C(128, 32, i2c)
-disp.fill(0)
-disp.show()
+// RoboEyes instance
+roboEyes roboEyes;
 
-# Function to reduce noise in audio
-def noise_reduction(audio_data, sample_rate):
-    print("Reducing background noise...")
-    audio_array = np.frombuffer(audio_data.frame_data, dtype=np.int16)
-    reduced_noise = reduce_noise(y=audio_array, sr=sample_rate)
-    return reduced_noise
+// Button pin definitions
+#define BUTTON_HAPPY 2
+#define BUTTON_ANGRY 3
+#define BUTTON_TIRED 4
+#define BUTTON_CONFUSED 5
 
-# Function for text-to-speech feedback
-def speak_text(text):
-    engine.say(text)
-    engine.runAndWait()
+// Variable to track the current emotion
+String currentEmotion = "DEFAULT";
 
-# Function to display text on OLED
-def display_text(text):
-    disp.fill(0)  # Clear the display
-    text_width, text_height = disp.text_width(text), disp.text_height(text)
-    x = (disp.width - text_width) // 2
-    y = (disp.height - text_height) // 2
-    disp.text(text, x, y, 1)
-    disp.show()
+void setup() {
+  Serial.begin(9600);
 
-# Main function for voice detection
-def advanced_voice_detection():
-    print("Initializing advanced voice detection...")
-    
-    while True:
-        try:
-            print("\nCalibrating microphone for ambient noise...")
-            with sr.Microphone() as mic:
-                recognizer.adjust_for_ambient_noise(mic, duration=2.0)
-                print("Listening for your voice...")
-                
-                # Capture audio input
-                audio = recognizer.listen(mic)
-                print("Processing audio...")
-                
-                # Noise reduction
-                reduced_audio = noise_reduction(audio, sample_rate=audio.sample_rate)
-                
-                # Recognize speech
-                text = recognizer.recognize_google(audio)
-                text = text.lower()
-                
-                print(f"Recognized: {text}")
-                speak_text(f"You said: {text}")
-                
-                # Display text on OLED
-                display_text(text) 
-                time.sleep(2)  # Display text for 2 seconds
+  // Initialize OLED Display
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;);
+  }
+  display.clearDisplay();
+  display.display();
 
-                # Exit condition (optional)
-                if "exit" in text or "quit" in text:
-                    print("Exiting voice detection. Goodbye!")
-                    speak_text("Goodbye!")
-                    break
-        
-        except sr.UnknownValueError:
-            print("Sorry, I could not understand that. Please try again.")
-            speak_text("I didn't catch that, could you please repeat?")
-        
-        except sr.RequestError as e:
-            print(f"Google Speech Recognition service error: {e}")
-            speak_text("There seems to be an issue with the speech recognition service.")
-            break
-        
-        except Exception as e:
-            print(f"An unexpected error occurred: {e}")
-            speak_text("An unexpected error occurred. Please check the console for details.")
-            break
+  // Initialize RoboEyes
+  roboEyes.begin(SCREEN_WIDTH, SCREEN_HEIGHT, 100);
+  roboEyes.setAutoblinker(ON, 3, 2);
+  roboEyes.setIdleMode(ON, 2, 2);
 
-# Run the advanced voice detection
-if _name_ == "_main_":
-    advanced_voice_detection()
+  // Initialize button pins as input with pull-up resistors
+  pinMode(BUTTON_HAPPY, INPUT_PULLUP);
+  pinMode(BUTTON_ANGRY, INPUT_PULLUP);
+  pinMode(BUTTON_TIRED, INPUT_PULLUP);
+  pinMode(BUTTON_CONFUSED, INPUT_PULLUP);
+
+  Serial.println("System ready! Press buttons to change emotions.");
+}
+
+void loop() {
+  // Check button states and trigger corresponding emotions
+  if (digitalRead(BUTTON_HAPPY) == LOW) {
+    currentEmotion = "HAPPY";
+    Serial.println("Happy mode activated!");
+    roboEyes.setMood(HAPPY);
+  } 
+  else if (digitalRead(BUTTON_ANGRY) == LOW) {
+    currentEmotion = "ANGRY";
+    Serial.println("Angry mode activated!");
+    roboEyes.setMood(ANGRY);
+  } 
+  else if (digitalRead(BUTTON_TIRED) == LOW) {
+    currentEmotion = "TIRED";
+    Serial.println("Tired mode activated!");
+    roboEyes.setMood(TIRED);
+  } 
+  else if (digitalRead(BUTTON_CONFUSED) == LOW) {
+    currentEmotion = "CONFUSED";
+    Serial.println("Confused animation activated!");
+    roboEyes.anim_confused(); // Play the confused animation
+  }
+
+  // Optionally, print the current emotion on the OLED display
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println("Current Emotion:");
+  display.println(currentEmotion);
+  display.display();
+
+  // Update RoboEyes to reflect changes
+  roboEyes.update();
+
+  delay(100); // Small delay for debouncing
+}
